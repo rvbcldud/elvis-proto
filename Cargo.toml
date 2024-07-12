@@ -1,0 +1,7 @@
+[package]
+name = "smol-play"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+smoltcp = "0.11.0"
