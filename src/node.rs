@@ -2,7 +2,7 @@ use smoltcp::{
     iface::{Config, Context, Interface, SocketSet},
     phy::Device,
     time::Instant,
-    wire::{IpAddress, IpCidr},
+    wire::{IpAddress, IpCidr, Ipv4Address},
 };
 
 /// This is a wrapper around Interface and a Device
@@ -35,12 +35,31 @@ where
         });
     }
 
-    /// Transmit packets queued in the given sockets, and receive packets queued in the device
-    pub fn poll(&mut self, sockets: &mut SocketSet) {
+    /// Add a default IPv4 gateway
+    pub fn add_ipv4_route(&mut self, addr: [u8; 4]) {
         self.iface
             .as_mut()
             .unwrap()
+            .routes_mut()
+            .add_default_ipv4_route(Ipv4Address::from_bytes(&addr))
+            .unwrap();
+    }
+
+    /// Transmit packets queued in the given sockets, and receive packets queued in the device
+    pub fn poll(&mut self, sockets: &mut SocketSet) {
+        let _ = self
+            .iface
+            .as_mut()
+            .unwrap()
             .poll(Instant::now(), &mut self.device, sockets);
+    }
+
+    pub fn delay(&mut self, sockets: &mut SocketSet) {
+        let _ = self
+            .iface
+            .as_mut()
+            .unwrap()
+            .poll_delay(Instant::now(), sockets);
     }
 
     /// Gets the context of the Interface (useful for socket calls)

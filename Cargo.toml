@@ -2,6 +2,9 @@
 name = "smol-play"
 version = "0.1.0"
 edition = "2021"
+debug = "true"
 
 [dependencies]
-smoltcp = "0.11.0"
+smoltcp = {version = "0.11.0", features = ["verbose", "log"]}
+log = "0.4.22"
+env_logger = "0.11.3"

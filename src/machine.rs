@@ -1,22 +1,26 @@
-use crate::token::{MyRxToken, MyTxToken};
+use crate::{
+    channel::Channel,
+    token::{MyRxToken, MyTxToken},
+};
 use smoltcp::{
     iface::{Config, Context, Interface, SocketSet},
     phy::{Device, DeviceCapabilities, Medium},
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address},
 };
-use std::{borrow::BorrowMut, collections::VecDeque, net::Ipv4Addr};
+use std::{cell::RefCell, collections::VecDeque, net::Ipv4Addr, rc::Rc};
+use log::trace;
 
 pub struct MyCoolMachine {
     addr: EthernetAddress,
-    buff: VecDeque<Vec<u8>>,
+    channel: Rc<RefCell<Channel>>,
 }
 
 impl MyCoolMachine {
-    pub fn new(addr: EthernetAddress) -> Self {
+    pub fn new(addr: EthernetAddress, channel: Rc<RefCell<Channel>>) -> Self {
         Self {
             addr,
-            buff: VecDeque::new(),
+            channel
         }
     }
 }
@@ -26,26 +30,33 @@ impl Device for MyCoolMachine {
     where
         Self: 'a;
 
-    type TxToken<'a> = MyTxToken<'a>
+    type TxToken<'a> = MyTxToken
     where
         Self: 'a;
     fn receive(&mut self, timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        println!("Cool machine recieving");
-        self.buff.pop_front().map(move |buffer| {
-            // Create receive token from the popped Vec
-            let rx = MyRxToken { buffer };
-            // Create transmit token from rest of buff
-            let tx = MyTxToken {
-                queue: &mut self.buff,
-            };
-            (rx, tx)
-        })
+        trace!("Machine recieving");
+        let rx = MyRxToken {
+            channel: self.channel.clone(),
+        };
+        let tx = MyTxToken {
+            channel: self.channel.clone(),
+        };
+
+        let c = self.channel.borrow_mut();
+        // Only do something when the channel is full
+        if !c.is_empty() {
+            trace!("-- CHANNEL IS [NOT] EMPTY --");
+            Some((rx, tx))
+        } else {
+            trace!("-- CHANNEL IS EMPTY --");
+            None
+        }
     }
 
     fn transmit(&mut self, timestamp: Instant) -> Option<Self::TxToken<'_>> {
-        println!("Cool machine transmitting");
+        trace!("Machine transmitting");
         Some(MyTxToken {
-            queue: &mut self.buff,
+            channel: self.channel.clone(),
         })
     }
 
