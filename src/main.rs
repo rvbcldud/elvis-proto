@@ -7,6 +7,7 @@ pub mod connection;
 
 use log::trace;
 use env_logger::Logger;
+use smoltcp::socket::tcp::State;
 use core::time;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use std::{collections::VecDeque, rc::Rc};
 
 use crate::channel::Channel;
 use crate::machine::MyCoolMachine;
-use crate::node::Node;
+use crate::node::{Node, HttpClient, HttpServer};
 use crate::connection::Connection;
 use smoltcp::{
     iface::{self, Config, Interface, SocketSet},
@@ -55,80 +56,35 @@ fn main() {
     node2.add_ipv4_route([1, 2, 3, 100]);
 
     // Initialize sockets & socket buffers
-    let mut client_sockets = SocketSet::new(vec![]);
-    let mut server_sockets = SocketSet::new(vec![]);
-
-    let client_socket = tcp::Socket::new(
-        tcp::SocketBuffer::new(vec![0; 1500]),
-        tcp::SocketBuffer::new(vec![0; 1500]),
-    );
-
-    let server_socket = tcp::Socket::new(
-        tcp::SocketBuffer::new(vec![0; 1500]),
-        tcp::SocketBuffer::new(vec![0; 1500]),
-    );
-
-    let client_handle = client_sockets.add(client_socket);
-    let server_handle = server_sockets.add(server_socket);
+    let client_handle = node1.add_tcp_socket();
+    let server_handle = node2.add_tcp_socket();
 
     let remote_addr = IpAddress::v4(1, 2, 3, 5);
     let remote_port = 1234;
     let host_port = 65000;
 
+
     loop {
         trace!("=== POLLING CLIENT ===");
-        node1.poll(&mut client_sockets);
+        node1.poll(Instant::now());
         trace!("=== POLLING SERVER ===");
-        node2.poll(&mut server_sockets);
+        node2.poll(Instant::now());
 
-        let socket = client_sockets.get_mut::<tcp::Socket>(client_handle);
         println!("=== CLIENT SIDE ===");
-        println!("State {}", socket.state());
-        println!("Active: {}", socket.is_active());
-        println!("Listen: {}", socket.is_listening());
-        println!("Open: {}", socket.is_open());
+        let client_state = node1.socket_status(client_handle);
 
-        let socket = server_sockets.get_mut::<tcp::Socket>(server_handle);
         println!("=== SERVER SIDE ===");
-        println!("State {}", socket.state());
-        println!("Active: {}", socket.is_active());
-        println!("Listen: {}", socket.is_listening());
-        println!("Open: {}", socket.is_open());
+        let server_state = node2.socket_status(server_handle);
 
-        if !socket.is_active() && !socket.is_listening() {
-            socket.listen(remote_port).unwrap();
-            println!("Server listening...");
+        node2.start_htpp_server(server_handle, remote_port);
+
+        node1.start_http_client(client_handle, remote_addr, remote_port, host_port);
+
+        if client_state == State::Established && server_state == State::Established {
+            node1.send_request(client_handle, "GET", "/elvis.html");
+            node2.handle_http_server(server_handle);
         }
 
-        let socket = client_sockets.get_mut::<tcp::Socket>(client_handle);
-        if !socket.is_open() {
-            socket
-                .connect(node1.context(), (remote_addr, remote_port), host_port)
-                .unwrap();
-            println!("Client connecting...")
-        }
-
-
-        // if socket.can_send() {
-        //     println!("sending");
-        //     socket.send_slice(b"0123456789abcdef").unwrap();
-        //     socket.close();
-        // }
-
-        // let socket = sockets.get_mut::<tcp::Socket>(server_handle);
-        // if socket.can_recv() {
-        //     print!(
-        //         "got {:?}",
-        //         socket.recv(|buffer| { (buffer.len(), std::str::from_utf8(buffer).unwrap()) })
-        //     );
-        //     socket.close();
-        // }
-
-        // match iface.poll_at(Instant::now()) {
-        //     Some(Instant::ZERO) => continue,
-        //     Some(d) => println!("sleeping for {}", d),
-        //     None => (),
-        // }
         thread::sleep(time::Duration::from_secs(1));
     }
 }
