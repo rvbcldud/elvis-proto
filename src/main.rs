@@ -65,9 +65,9 @@ fn main() {
 
 
     loop {
-        trace!("=== POLLING CLIENT ===");
+        println!("=== POLLING CLIENT ===");
         node1.poll(Instant::now());
-        trace!("=== POLLING SERVER ===");
+        println!("=== POLLING SERVER ===");
         node2.poll(Instant::now());
 
         println!("=== CLIENT SIDE ===");
@@ -80,9 +80,11 @@ fn main() {
 
         node1.start_http_client(client_handle, remote_addr, remote_port, host_port);
 
+        // Sends the same request to the server, and client receives a response
         if client_state == State::Established && server_state == State::Established {
             node1.send_request(client_handle, "GET", "/elvis.html");
             node2.handle_http_server(server_handle);
+            node1.handle_http_client(client_handle)
         }
 
         thread::sleep(time::Duration::from_secs(1));

@@ -118,6 +118,7 @@ where
         }
     }
 
+    /// Starts a socket listening on a given port
     pub fn socket_listen(&mut self, handle: SocketHandle, remote_port: u16) {
         let socket = self.sockets.get_mut::<tcp::Socket>(handle);
 
@@ -129,6 +130,7 @@ where
         }
     }
 
+    /// Receives a packet from a given socket, if possible
     pub fn socket_recv<'b, F, R>(&'b mut self, handle: SocketHandle, f: F)
         where
             F: FnOnce(&'b mut [u8]) -> (usize, R),
@@ -138,11 +140,13 @@ where
         if socket.can_recv() {
             // Perform closure on received packet
             let _ = socket.recv(f);
+            // socket.
         } else {
             println!("Cannot recv!");
         }
     }
 
+    /// Sends a packet to a given socket, if possible
     pub fn socket_send(&mut self, handle: SocketHandle, packet: &[u8]) {
         let socket = self.sockets.get_mut::<tcp::Socket>(handle);
 
@@ -165,10 +169,18 @@ where
     }
 
     fn handle_http_server(&mut self, handle: SocketHandle) {
-        self.socket_recv(handle, |packet| {
-            println!("Receieved REQUEST: {}", std::str::from_utf8(packet).unwrap());
-            (packet.len(), ())
-        })
+        let packet = {
+            let mut packet_data = Vec::new(); // Create a vector to store packet data
+            self.socket_recv(handle, |recv_packet| {
+                packet_data.extend_from_slice(recv_packet);
+                (recv_packet.len(), ())
+            });
+            packet_data
+        };
+        println!("Received REQUEST: {}", std::str::from_utf8(&packet).unwrap());
+
+        let response = "HTTP Response!";
+        self.socket_send(handle, response.as_bytes());
     }
 }
 
@@ -183,6 +195,8 @@ where
 
     fn send_request(&mut self, handle: SocketHandle, method: &str, path: &str) {
         let packet = format!("{} {}", method, path);
+
+        println!("Sending REQUEST: {}", packet);
 
         self.socket_send(handle, packet.as_bytes());
     }
